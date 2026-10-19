@@ -199,7 +199,15 @@ class MilvusVectorStore:
             self.client.load_collection(collection_name=self.collection)
         except Exception as e:
             # 部分部署（如 Milvus Lite）会自动加载，加载失败也不该阻断检索
-            print(f"[milvus] load_collection 跳过：{type(e).__name__}: {e}")
+            msg = str(e)
+            # 常见于 Windows：Milvus Lite 会在数据目录下写很深的文件，
+            # 路径超过 MAX_PATH(260) 就报 "could not open ... for writing"。
+            # 这不是权限或数据损坏，而是路径太长 —— 提示用户把项目放在更短的位置。
+            if "could not open" in msg and "for writing" in msg:
+                print("[milvus] 提示：数据目录路径过长（Windows MAX_PATH 260 字符限制），"
+                      "建议把项目移到更短的路径，例如 E:\\rag")
+            else:
+                print(f"[milvus] load_collection 跳过：{type(e).__name__}: {e}")
         self._loaded = True
 
     # ------------------------------------------------------------
