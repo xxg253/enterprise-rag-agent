@@ -1,0 +1,15 @@
+langgraph
+langchain
+langchain-community
+langchain-openai
+pymilvus
+pyyaml
+tiktoken
+typer
+numpy
+pytest
+fastapi
+uvicorn
+python-multipart
+pypdf
+python-docx

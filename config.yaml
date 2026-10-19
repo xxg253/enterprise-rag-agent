@@ -1,0 +1,62 @@
+# ============================================================
+# 全局配置文件
+# 设计原则：所有"环境相关"的参数（模型、Key、阈值）都集中在这里，
+# 代码里只读 config，不写死任何魔法数字。这也是企业项目的基本要求
+# —— 配置与代码分离，方便在不同环境（开发/测试/生产）间切换。
+#
+# 【关于 ${...} 占位符】
+#   api_key / base_url / provider 这类值不在本文件里写死，而是从环境变量读取：
+#     真实值写在同目录的 .env 文件里（已被 .gitignore 忽略，不会进仓库），
+#     或者直接用系统环境变量。加载逻辑见 src/config.py。
+#   语法与 shell 一致：${VAR} 取环境变量、${VAR:-默认值} 没配时用默认值。
+#   这样仓库可以公开，而密钥不会泄露；别人 clone 下来零配置也能跑（mock 模式）。
+#   需要配哪些变量见 .env.example。
+# ============================================================
+
+llm:
+  # provider: mock（离线演示，无需 Key） | openai（接真实模型）
+  provider: ${LLM_PROVIDER:-mock}
+  model: ${LLM_MODEL:-qwen-plus}
+  # OpenAI 兼容端点；阿里云 MaaS / DeepSeek / 混元 都兼容这一套协议
+  base_url: ${LLM_BASE_URL:-}
+  api_key: ${LLM_API_KEY:-}
+  temperature: 0.0
+  max_tokens: 1024
+
+embeddings:
+  # 嵌入模型同样支持 mock（确定性伪向量，仅用于跑通流程）与 openai
+  provider: ${EMBEDDINGS_PROVIDER:-mock}
+  model: ${EMBEDDINGS_MODEL:-text-embedding-v3}
+  base_url: ${EMBEDDINGS_BASE_URL:-}
+  api_key: ${EMBEDDINGS_API_KEY:-}
+  cache: true            # 嵌入向量磁盘缓存：命中的块不再重复调用接口（省 token 的关键）
+  cache_dir: cache       # 缓存目录（相对项目根目录），可随时删除以强制重算
+
+retrieval:
+  chunk_size: 800        # 大文件的块大小（字符），块越大块数越少 => 嵌入请求越少
+  chunk_overlap: 120     # 块间重叠，避免一句话被切断导致语义丢失
+  top_k: 6               # 每次检索召回的最相关片段数
+  vectorstore: milvus    # milvus（默认，生产级 + 持久化） | numpy（零依赖降级兜底）
+  min_chunk_file: 2000   # 文件短于该字数则整篇一块不切（FAQ 这类小文件）
+  neighbor_expand: 1     # 邻块扩展半径：命中块前后各带 N 个同源块，修复"半句话"问题
+  max_per_source: 2      # 单一来源最多占 Top-K 里几个名额，防止大文件霸榜
+  min_score: 0.0         # 相似度下限，低于此分视为噪声丢弃
+  # ---- Milvus 向量库连接参数 ----
+  # uri 三种写法：
+  #   "local" / "milvus.db"      -> Milvus Lite 本地嵌入式库（免部署）
+  #   "./milvus/rag.db"          -> 本地文件（相对项目根目录）
+  #   "http://localhost:19530"   -> 连接 Milvus Standalone（Docker）或 Zilliz Cloud
+  milvus_uri: ./milvus/rag.db
+  collection_name: rag_chunks   # 集合名
+  index_type: HNSW              # HNSW：召回与延迟均衡；IVF_FLAT：数据极大时更省内存
+  metric: IP                   # IP（内积）+ 入库归一化 == 余弦相似度
+
+memory:
+  short_term_window: 6   # 短期记忆：保留最近 N 轮对话
+  long_term_top_k: 3     # 长期记忆：按语义召回的历史问答条数
+  persist: true          # 长期记忆落盘，重启后仍然记得
+  memory_dir: .memory    # 记忆文件目录（相对知识库目录）
+
+graph:
+  max_critic_loops: 0    # "生成 → 批判 → 再审" 最多循环次数（0=不做审稿，最省 token）
+  rule_route_first: true # 路由先用规则判断，命中则省掉一次大模型调用

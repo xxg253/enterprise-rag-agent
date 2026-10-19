@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>企业文档智能问答系统 · RAG 多智能体</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🤖</text></svg>">
+<style>
+  /* ============ 简洁风格：左对话 + 右文件库，两栏布局 ============ */
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    margin: 0; background: #f4f6f8; color: #222;
+    display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+  }
+  header {
+    background: #2c3e50; color: #fff; padding: 12px 20px;
+    display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;
+  }
+  header h1 { font-size: 16px; margin: 0; display: flex; align-items: center; gap: 8px; }
+  .tag {
+    font-size: 11px; font-weight: normal; opacity: .8;
+    border: 1px solid rgba(255,255,255,.4); border-radius: 10px; padding: 1px 8px;
+  }
+  #status { font-size: 12px; opacity: .9; text-align: right; display: block; }
+  #statusSub { display: block; font-size: 11px; opacity: .68; margin-top: 2px; text-align: right; }
+  .status-warn { color: #ffd479; }
+
+  /* 主体：两栏 */
+  main { flex: 1; display: flex; overflow: hidden; }
+
+  /* 左栏：对话 */
+  .chat-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  #chat {
+    flex: 1; overflow-y: auto; padding: 16px 20px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .msg { max-width: 780px; padding: 10px 14px; border-radius: 8px; line-height: 1.6; white-space: pre-wrap; }
+  .user { align-self: flex-end; background: #3498db; color: #fff; }
+  .bot  { align-self: flex-start; background: #fff; border: 1px solid #e0e4e8; }
+  .trace {
+    align-self: flex-start; font-size: 12px; color: #7f8c8d;
+    background: #eef1f4; padding: 6px 10px; border-radius: 6px;
+    font-family: Consolas, monospace; white-space: pre-wrap;
+  }
+  footer { padding: 12px 20px; background: #fff; border-top: 1px solid #e0e4e8; display: flex; gap: 10px; flex-shrink: 0; }
+  input[type=text] {
+    flex: 1; padding: 10px 12px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px;
+  }
+  button {
+    padding: 10px 18px; background: #2c3e50; color: #fff; border: none;
+    border-radius: 6px; cursor: pointer; font-size: 14px;
+  }
+  button:disabled { background: #95a5a6; cursor: not-allowed; }
+  button.small { padding: 4px 10px; font-size: 12px; }
+
+  /* 右栏：文件库 */
+  .files-pane {
+    width: 320px; background: #fff; border-left: 1px solid #e0e4e8;
+    display: flex; flex-direction: column; overflow: hidden; flex-shrink: 0;
+  }
+  .files-head {
+    padding: 12px 16px; border-bottom: 1px solid #e0e4e8;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .files-head h2 { font-size: 14px; margin: 0; }
+  .files-toolbar { padding: 10px 16px; border-bottom: 1px solid #f0f0f0; display: flex; gap: 8px; }
+  .files-toolbar button { flex: 1; padding: 8px; font-size: 13px; }
+  #fileList { flex: 1; overflow-y: auto; padding: 8px 12px; }
+  .file-item {
+    padding: 10px; border: 1px solid #eef1f4; border-radius: 6px;
+    margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+  }
+  .file-info { overflow: hidden; flex: 1; cursor: pointer; }
+  .file-info:hover .file-name { color: #3498db; text-decoration: underline; }
+  .file-name { font-size: 13px; font-weight: 600; word-break: break-all; }
+  .file-meta { font-size: 11px; color: #95a5a6; margin-top: 2px; }
+  .file-actions { display: flex; gap: 4px; flex-shrink: 0; }
+  .del-btn { background: #e74c3c; padding: 4px 10px; font-size: 12px; flex-shrink: 0; }
+  .view-btn { background: #3498db; padding: 4px 10px; font-size: 12px; flex-shrink: 0; }
+  .badge-unsupported { color: #e67e22; font-size: 11px; }
+
+  /* 文件预览弹窗 */
+  #previewModal {
+    position: fixed; inset: 0; background: rgba(0,0,0,.5);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  #previewModal.show { display: flex; }
+  .preview-box {
+    background: #fff; width: 80%; max-width: 800px; height: 80%;
+    border-radius: 10px; display: flex; flex-direction: column; overflow: hidden;
+  }
+  .preview-head {
+    padding: 12px 18px; border-bottom: 1px solid #e0e4e8;
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .preview-head h3 { margin: 0; font-size: 15px; }
+  .preview-body { flex: 1; overflow-y: auto; padding: 16px 18px; }
+  .preview-body pre {
+    white-space: pre-wrap; word-break: break-word; font-size: 13px;
+    font-family: Consolas, monospace; margin: 0; line-height: 1.6;
+  }
+  .preview-note { font-size: 12px; color: #95a5a6; padding: 8px 18px; border-top: 1px solid #f0f0f0; }
+  .empty { color: #bdc3c7; font-size: 13px; text-align: center; padding: 20px; }
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #2c3e50; color: #fff; padding: 10px 20px; border-radius: 6px;
+    font-size: 13px; opacity: 0; transition: opacity .3s; pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>企业文档智能问答系统 <span class="tag">RAG 多智能体</span></h1>
+  <div>
+    <span id="status">加载中…</span>
+    <span id="statusSub"></span>
+  </div>
+</header>
+
+<main>
+  <!-- 左栏：对话 -->
+  <div class="chat-pane">
+    <div id="chat">
+      <div class="bot msg">你好！我可以基于企业知识库回答问题。试试问：「你们的退款政策是什么？」</div>
+    </div>
+    <footer>
+      <input type="text" id="q" placeholder="输入你的问题，回车发送…" autocomplete="off">
+      <button id="send">发送</button>
+    </footer>
+  </div>
+
+  <!-- 右栏：文件库 -->
+  <div class="files-pane">
+    <div class="files-head">
+      <h2>知识库文件</h2>
+      <span id="fileCount" style="font-size:12px;color:#95a5a6;">0 个</span>
+    </div>
+    <div class="files-toolbar">
+      <button id="uploadBtn">上传文件</button>
+      <button id="refreshBtn" style="background:#7f8c8d;">刷新</button>
+    </div>
+    <!-- 隐藏的文件选择框 -->
+    <input type="file" id="fileInput" multiple accept=".txt,.md,.markdown,.csv,.json,.pdf,.docx" style="display:none">
+    <div id="fileList"><div class="empty">加载中…</div></div>
+  </div>
+</main>
+
+<div id="toast"></div>
+
+<!-- 文件预览弹窗 -->
+<div id="previewModal">
+  <div class="preview-box">
+    <div class="preview-head">
+      <h3 id="previewTitle">文件预览</h3>
+      <button id="previewClose" style="background:#7f8c8d;">关闭</button>
+    </div>
+    <div class="preview-body"><pre id="previewContent">加载中…</pre></div>
+    <div class="preview-note" id="previewNote"></div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 前端逻辑：对话（流式） + 文件库管理（上传/列表/删除）
+// ============================================================
+const chatEl = document.getElementById('chat');
+const inputEl = document.getElementById('q');
+const sendBtn = document.getElementById('send');
+const statusEl = document.getElementById('status');
+const statusSubEl = document.getElementById('statusSub');
+const fileListEl = document.getElementById('fileList');
+const fileCountEl = document.getElementById('fileCount');
+const fileInput = document.getElementById('fileInput');
+const toastEl = document.getElementById('toast');
+
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add('show');
+  setTimeout(() => toastEl.classList.remove('show'), 2000);
+}
+
+// ---------- 顶部状态：把"跑在什么上"一眼说清楚 ----------
+// 面试演示时这一栏就是你的技术栈证明：用的哪个模型、哪个向量库、
+// 什么索引、库里多少条向量，全部来自后端**真实运行状态**而非配置文件。
+fetch('/api/info').then(r => r.json()).then(d => {
+  const cfgName = d.vectorstore_cfg || d.vectorstore;
+  const real = d.vectorstore || 'numpy';
+  const label = real === 'milvus' ? 'Milvus' : (real === 'numpy' ? 'NumPy（降级）' : real);
+  const coll = d.collection ? ' · ' + d.collection : '';
+  const idx = d.index_type ? ` · ${d.index_type}/${d.metric}` : '';
+  statusEl.textContent = `模型 ${d.model} · 向量库 ${label}${coll}${idx} · topK ${d.top_k}`;
+  // 配置里写了 Milvus 但实际跑的是 numpy（环境不支持）时，如实标黄提示
+  let sub = `${d.chunks} 块 / ${d.sources} 文件 · 长期记忆 ${d.memories} 条`
+          + ` · 嵌入缓存命中 ${d.cache_hits} / 新算 ${d.cache_misses}`;
+  if (cfgName !== real) sub = `⚠ 配置为 ${cfgName}，已降级 · ` + sub;
+  statusSubEl.textContent = sub;
+  if (d.error) {
+    statusSubEl.textContent += ' · ⚠ ' + d.error;
+    statusSubEl.classList.add('status-warn');
+  }
+}).catch(() => { statusEl.textContent = '后端未连接'; });
+
+// ============================================================
+// 一、文件库管理
+// ============================================================
+function fmtSize(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+  return (bytes / 1024 / 1024).toFixed(1) + ' MB';
+}
+function fmtTime(ts) {
+  const d = new Date(ts * 1000);
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadFiles() {
+  try {
+    const resp = await fetch('/api/files');
+    const data = await resp.json();
+    fileCountEl.textContent = data.count + ' 个';
+    if (!data.files.length) {
+      fileListEl.innerHTML = '<div class="empty">文件库为空<br>点上方「上传文件」添加 .md / .txt / .pdf 等</div>';
+      return;
+    }
+    fileListEl.innerHTML = '';
+    for (const f of data.files) {
+      const item = document.createElement('div');
+      item.className = 'file-item';
+      const supportTag = f.supported ? '' : '<span class="badge-unsupported">（不支持索引）</span>';
+      item.innerHTML = `
+        <div class="file-info" title="点击查看内容">
+          <div class="file-name">${escapeHtml(f.name)} ${supportTag}</div>
+          <div class="file-meta">${fmtSize(f.size)} · ${fmtTime(f.mtime)}</div>
+        </div>
+        <div class="file-actions">
+          <button class="view-btn small" data-name="${escapeHtml(f.name)}">查看</button>
+          <button class="del-btn small" data-name="${escapeHtml(f.name)}">删除</button>
+        </div>
+      `;
+      fileListEl.appendChild(item);
+    }
+    // 绑定查看 / 删除事件
+    fileListEl.querySelectorAll('.view-btn').forEach(btn => {
+      btn.addEventListener('click', () => previewFile(btn.dataset.name));
+    });
+    fileListEl.querySelectorAll('.del-btn').forEach(btn => {
+      btn.addEventListener('click', () => deleteFile(btn.dataset.name));
+    });
+    // 点击文件名也可预览
+    fileListEl.querySelectorAll('.file-info').forEach(info => {
+      info.addEventListener('click', () => {
+        const name = info.querySelector('.file-name').textContent.trim().split(' ')[0];
+        previewFile(name);
+      });
+    });
+  } catch (e) {
+    fileListEl.innerHTML = '<div class="empty">加载失败：' + e.message + '</div>';
+  }
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+async function previewFile(name) {
+  const modal = document.getElementById('previewModal');
+  const title = document.getElementById('previewTitle');
+  const content = document.getElementById('previewContent');
+  const note = document.getElementById('previewNote');
+  title.textContent = name;
+  content.textContent = '加载中…';
+  note.textContent = '';
+  modal.classList.add('show');
+  try {
+    const resp = await fetch('/api/files/' + encodeURIComponent(name) + '/preview');
+    const data = await resp.json();
+    if (resp.ok) {
+      content.textContent = data.content || '（文件无可提取文本）';
+      note.textContent = data.truncated
+        ? `已截断显示，全文共 ${data.total_chars} 字符`
+        : `全文共 ${data.total_chars} 字符`;
+    } else {
+      content.textContent = '预览失败：' + (data.detail || '未知错误');
+    }
+  } catch (e) {
+    content.textContent = '预览失败：' + e.message;
+  }
+}
+
+document.getElementById('previewClose').addEventListener('click', () => {
+  document.getElementById('previewModal').classList.remove('show');
+});
+document.getElementById('previewModal').addEventListener('click', e => {
+  if (e.target.id === 'previewModal') e.target.classList.remove('show');
+});
+
+async function deleteFile(name) {
+  if (!confirm(`确定删除「${name}」吗？删除后会立即重建索引。`)) return;
+  try {
+    const resp = await fetch('/api/files/' + encodeURIComponent(name), { method: 'DELETE' });
+    const data = await resp.json();
+    if (resp.ok) {
+      toast(`已删除 ${data.deleted}，重建索引 ${data.indexed_chunks} 块`);
+      loadFiles();
+    } else {
+      toast('删除失败：' + (data.detail || '未知错误'));
+    }
+  } catch (e) { toast('删除失败：' + e.message); }
+}
+
+async function uploadFiles(files) {
+  if (!files.length) return;
+  const form = new FormData();
+  for (const f of files) form.append('files', f);
+  toast('上传中…');
+  try {
+    const resp = await fetch('/api/upload', { method: 'POST', body: form });
+    const data = await resp.json();
+    if (resp.ok) {
+      let msg = `已上传 ${data.saved.length} 个文件`;
+      if (data.indexed_chunks != null) msg += `，共索引 ${data.indexed_chunks} 块`;
+      if (data.skipped.length) msg += `；跳过 ${data.skipped.length} 个`;
+      toast(msg);
+      // 若某文件解析出 0 块，单独警告
+      for (const d of (data.details || [])) {
+        if (d.warning) toast(`「${d.name}」${d.warning}`);
+      }
+      loadFiles();
+    } else {
+      toast('上传失败：' + (data.detail || '未知错误'));
+    }
+  } catch (e) { toast('上传失败：' + e.message); }
+}
+
+document.getElementById('uploadBtn').addEventListener('click', () => fileInput.click());
+document.getElementById('refreshBtn').addEventListener('click', loadFiles);
+fileInput.addEventListener('change', () => { uploadFiles(fileInput.files); fileInput.value = ''; });
+
+// ============================================================
+// 二、对话（流式）
+// ============================================================
+function addMsg(text, cls) {
+  const div = document.createElement('div');
+  div.className = cls + ' msg';
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+  return div;
+}
+function addTrace(text) {
+  const div = document.createElement('div');
+  div.className = 'trace';
+  div.textContent = text;
+  chatEl.appendChild(div);
+  chatEl.scrollTop = chatEl.scrollHeight;
+}
+
+async function send() {
+  const question = inputEl.value.trim();
+  if (!question) return;
+  addMsg(question, 'user');
+  inputEl.value = '';
+  sendBtn.disabled = true;
+  const botEl = addMsg('', 'bot');
+
+  try {
+    const resp = await fetch('/api/chat/stream', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question })
+    });
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder('utf-8');
+    let buffer = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const parts = buffer.split('\n\n');
+      buffer = parts.pop();
+      for (const part of parts) {
+        const line = part.trim();
+        if (!line.startsWith('data:')) continue;
+        const payload = JSON.parse(line.slice(5).trim());
+        if (payload.type === 'trace') addTrace(payload.content);
+        else if (payload.type === 'answer') botEl.textContent += payload.content;
+        else if (payload.type === 'error') botEl.textContent = '错误：' + payload.content;
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    }
+  } catch (e) {
+    botEl.textContent = '请求失败：' + e.message;
+  } finally {
+    sendBtn.disabled = false;
+    inputEl.focus();
+  }
+}
+
+sendBtn.addEventListener('click', send);
+inputEl.addEventListener('keydown', e => { if (e.key === 'Enter') send(); });
+inputEl.focus();
+
+// 初始化：加载文件库
+loadFiles();
+</script>
+</body>
+</html>

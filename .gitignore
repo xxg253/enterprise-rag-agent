@@ -1,0 +1,61 @@
+# ============================================================
+# .gitignore —— 明确哪些东西不能进版本库
+# ============================================================
+
+# ---- 密钥与本地环境：绝对不能提交 ----
+.env
+*.key
+*.pem
+
+# ---- 知识库里的个人资料（简历/论文等）：体积大且含隐私 ----
+# 想换自己的资料，直接放进 data/ 即可（前端也能上传）
+data/*.pdf
+data/*.docx
+data/*.doc
+
+# ---- 运行期生成物：都能重建，不该进仓库 ----
+# 嵌入向量磁盘缓存（可删，会自动重算）
+cache/
+# Milvus Lite 本地库（可删，会自动重建索引）
+milvus/
+milvus.db/
+# 长期记忆落盘文件（含真实对话内容）
+data/.memory/
+
+# ---- Python 常规忽略项 ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# ---- 测试与工具缓存 ----
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# ---- IDE ----
+.idea/
+.vscode/
+*.swp
+
+# ---- 日志与系统文件 ----
+*.log
+.DS_Store
+Thumbs.db
+
+# ---- 本地备份目录（改代码前的整份拷贝，含旧配置）----
+_backup_*/
+_backup*/
+
+# ---- 其它本地产物 ----
+*.db
+!*.sqlite
+export/
+output/
