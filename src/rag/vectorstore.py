@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 
 from typing import Protocol
 
@@ -157,6 +158,17 @@ class MilvusVectorStore:
                 "未安装 pymilvus，无法使用 Milvus 向量库；"
                 "请执行 pip install pymilvus，或把 retrieval.vectorstore 改回 numpy"
             ) from e
+
+        # 本地模式必须先建好数据目录，否则 milvus-lite 会抛
+        # ConnectionConfigException: Open local milvus failed, dir: ... not exists。
+        # 踩坑记录：目录是 milvus-lite 首次启动时自动创建的，但如果目录压根不存在，
+        # 它不会自建而是直接失败 —— 于是"新人 clone 下来第一次跑"必然降级成 numpy，
+        # 而本机因为目录早就建好了所以完全看不出问题。故这里显式 mkdir(parents=True)。
+        if isinstance(uri, str) and not uri.startswith(("http://", "https://", "unix:")):
+            try:
+                Path(uri).parent.mkdir(parents=True, exist_ok=True)
+            except OSError:
+                pass  # 建不了就交给下面的连接去报错，走既有降级逻辑
 
         # uri 规范化：local 关键字 -> 具体的本地 db 文件
         self.client = MilvusClient(uri=str(uri))

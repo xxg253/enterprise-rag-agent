@@ -354,3 +354,42 @@ def test_runtime_validation_catches_missing_key():
         cfg.validate_runtime()
     # mock 模式不该报错
     AppConfig(llm=LLMConfig(provider="mock", api_key="", base_url="")).validate_runtime()
+
+
+def test_requirements_include_milvus_lite():
+    """requirements.txt 必须同时写 pymilvus 和 milvus-lite。
+
+    踩坑记录：只装 pymilvus 而漏掉 milvus-lite，启动时报
+    "milvus-lite is required"，新人 clone 后第一步就卡住。
+    这条测试就是防止以后再漏。
+    """
+    root = Path(__file__).parent.parent
+    text = (root / "requirements.txt").read_text(encoding="utf-8").lower()
+    assert "pymilvus" in text
+    assert "milvus-lite" in text
+
+
+def test_milvus_creates_missing_data_dir(tmp_path):
+    """Milvus Lite 数据目录不存在时应自动创建，而不是静默降级成 numpy。
+
+    踩坑记录：milvus-lite 不会自建数据目录，目录缺失时抛
+    ConnectionConfigException(dir: ... not exists)，被降级逻辑吃掉后
+    backend 悄悄变成 numpy。本机目录早就建好，所以本地测不出来，
+    只有"全新 clone 的干净目录"才会触发 —— 这就是它的危险之处。
+    """
+    from src.rag.vectorstore import MilvusVectorStore
+    from src.rag.loader import Document
+
+    target = tmp_path / "brand_new_dir" / "rag.db"   # 故意指向一个不存在的两级目录
+    assert not target.parent.exists()
+
+    emb = MockEmbeddings()
+    try:
+        store = MilvusVectorStore(emb, uri=str(target), collection="t_fresh")
+    except Exception as e:
+        # 环境不支持 Milvus Lite（如 Linux 以外未装 milvus-lite），跳过即可
+        pytest.skip(f"当前环境无法运行 Milvus Lite：{type(e).__name__}")
+
+    assert target.parent.exists(), "连接前应先建好 Milvus 数据目录"
+    store.add([Document(content="退换货政策：7 天无理由", source="a.md", chunk_id=0)])
+    assert len(store.search("退换货", top_k=1)) == 1

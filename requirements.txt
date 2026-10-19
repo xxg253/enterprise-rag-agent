@@ -1,15 +1,30 @@
+# ============================================================
+# 依赖清单
+# 说明：本地向量库用 Milvus Lite（milvus-lite），
+#      它是 milvus 官方给单机/开发用的嵌入式实现，不需要起 docker 服务。
+#      只装 pymilvus 会报 "milvus-lite is required"，所以这里两个都要写。
+# ============================================================
+
+# ---- LLM / Embeddings 调用（OpenAI 兼容协议，故也支持阿里云百炼等）----
 langgraph
-langchain
-langchain-community
+langchain-core
 langchain-openai
-pymilvus
-pyyaml
 tiktoken
-typer
-numpy
-pytest
+
+# ---- 向量库 ----
+pymilvus
+milvus-lite
+
+# ---- Web 服务 ----
 fastapi
 uvicorn
 python-multipart
+
+# ---- 文档解析 ----
 pypdf
 python-docx
+
+# ---- 其它 ----
+pyyaml
+numpy
+pytest

@@ -103,6 +103,45 @@ enterprise_rag_agent/
 
 ## 四、快速开始
 
+### 方式零：从零clone（新人建议照这个顺序）
+
+```bash
+# 1) 拉代码
+git clone https://github.com/xxg253/enterprise-rag-agent.git
+cd enterprise-rag-agent
+
+# 2) 建虚拟环境（务必用虚拟环境，别装进系统 Python）
+python -m venv .venv
+
+# Windows 下激活：
+.venv\Scripts\activate
+# macOS / Linux 下激活：
+# source .venv/bin/activate
+
+# 3) 装依赖
+pip install -r requirements.txt
+
+# 4) 跑起来
+python run_web.py
+#    浏览器打开 http://127.0.0.1:8000
+```
+
+**关于向量库（新人最常问的两个问题）**
+
+> **Q：仓库里为什么看不到 Milvus 的数据文件？**
+> 因为向量数据属于**运行期生成物**，和数据库文件、缓存、`.venv` 一样，不该进 git。
+> 本项目用 **Milvus Lite**——它是 Milvus 官方的嵌入式单机版，纯 Python 进程内运行，
+> **不需要装 Docker、不需要起服务**。首次 `run_web.py` 时会自动创建 `milvus/rag.db`
+> 并把 `data/` 目录里的文档切块、向量化、建索引。
+>
+> 想清空重来？直接删掉 `milvus/` 目录重启即可，会自动重建。
+> 想换成自己的知识库？把你的 `.pdf/.docx/.md/.txt` 丢进 `data/`，或者直接在网页右侧上传。
+
+> **Q：一定要联网吗？**
+> 不配 `.env` 也能跑。此时是 **mock 模式**：用假模型生成检索结果，
+> 用来演示流程和跑测试。想接真实模型（阿里云百炼 / OpenAI 等 OpenAI 兼容接口），
+> 见下一节「接入真实大模型」。
+
 ### 方式一：Web 应用（浏览器界面）
 
 ```bash
